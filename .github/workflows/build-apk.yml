@@ -29,9 +29,10 @@ jobs:
 
     - name: Build Debug APK
       working-directory: ./android
-      run: gradle assembleDebug --no-daemon --stacktrace
+      run: gradle assembleDebug --stacktrace
 
     - name: Upload APK Artifact
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: Mayur_Enterprises_Badaun_APK
