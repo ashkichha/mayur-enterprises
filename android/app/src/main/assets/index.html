@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1e3a5f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>Mayur Enterprises — UPSRTC Accounting & Tax Invoice System</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="js/chart.umd.min.js"></script>
+  <style>
+    /* Inline critical fallback */
+    .loading-screen {
+      display: flex; align-items: center; justify-content: center;
+      height: 100vh; width: 100%; font-family: 'Segoe UI', sans-serif;
+      flex-direction: column; gap: 16px; color: #1e3a5f;
+    }
+    .loading-screen .spinner {
+      width: 40px; height: 40px; border: 4px solid #e2e8f0;
+      border-top-color: #1e3a5f; border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <!-- Mobile Header Bar -->
+  <div class="mobile-header no-print">
+    <button class="mobile-menu-btn" id="mobile-menu-toggle" aria-label="Toggle Navigation">☰</button>
+    <div class="mobile-title">MAYUR ENTERPRISES</div>
+  </div>
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+
+  <!-- Sidebar Navigation -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1>MAYUR ENTERPRISES</h1>
+      <p>UPSRTC Bus Washing Contract<br>Badaun Depot — Accounting System</p>
+    </div>
+    <div class="nav-items" id="nav-items">
+      <!-- Populated by app.js -->
+    </div>
+    <div class="sidebar-footer">
+      <div style="display:flex;gap:6px;margin-bottom:8px;justify-content:center;">
+        <button id="btn-backup-data" class="btn btn-outline btn-sm" style="color:#fff;border-color:rgba(255,255,255,0.2);padding:3px 8px;font-size:10px;" title="Export all stored data as JSON">💾 Backup</button>
+        <button id="btn-reset-data" class="btn btn-outline btn-sm" style="color:#fed7d7;border-color:rgba(255,255,255,0.2);padding:3px 8px;font-size:10px;" title="Reset all records to original Excel state">🔄 Reset</button>
+      </div>
+      Mayur Enterprises &copy; 2023-2030<br>
+      Engineers &amp; Contractors, Bareilly
+    </div>
+  </nav>
+
+  <!-- Main Content Area -->
+  <div class="main-content" id="main-content">
+    <div class="loading-screen">
+      <div class="spinner"></div>
+      <p>Loading Accounting System...</p>
+    </div>
+  </div>
+
+  <!-- Scripts: Data first, then utilities, then modules, then app controller -->
+  <script src="js/data.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/buslog.js"></script>
+  <script src="js/billing.js"></script>
+  <script src="js/attendance.js"></script>
+  <script src="js/payroll.js"></script>
+  <script src="js/expenses.js"></script>
+  <script src="js/profit.js"></script>
+  <script src="js/busyexport.js"></script>
+  <script src="js/capital.js"></script>
+  <script src="js/invoice.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => {
+          console.log('ServiceWorker registration optional/skipped:', err);
+        });
+      });
+    }
+  </script>
+
+</body>
+</html>
