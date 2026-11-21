@@ -3,16 +3,17 @@
 // ============================================================
 (function() {
   const NAV_ITEMS = [
-    { id: 'dashboard',  icon: '📊', label: 'Dashboard',           module: () => window.DashboardModule },
-    { id: 'buslog',     icon: '🚌', label: 'Bus Washing Log',     module: () => window.BusLogModule },
-    { id: 'billing',    icon: '📋', label: 'UPSRTC Billing',      module: () => window.BillingModule },
-    { id: 'attendance', icon: '👥', label: 'Attendance',           module: () => window.AttendanceModule },
-    { id: 'payroll',    icon: '💰', label: 'Staff Payroll',        module: () => window.PayrollModule },
-    { id: 'expenses',   icon: '📑', label: 'Partner Expenses',     module: () => window.ExpensesModule },
-    { id: 'profit',     icon: '📈', label: 'Profit Settlement',    module: () => window.ProfitModule },
-    { id: 'busyexport', icon: '💾', label: 'Busy Export',          module: () => window.BusyExportModule },
-    { id: 'capital',    icon: '🏗️', label: 'Capital & Assets',    module: () => window.CapitalModule },
-    { id: 'invoice',    icon: '🧾', label: 'Tax Invoice',          module: () => window.InvoiceModule }
+    { id: 'dashboard',     icon: '📊', label: 'Dashboard',           module: () => window.DashboardModule },
+    { id: 'buslog',        icon: '🚌', label: 'Bus Washing Log',     module: () => window.BusLogModule },
+    { id: 'billing',       icon: '📋', label: 'UPSRTC Billing',      module: () => window.BillingModule },
+    { id: 'attendance',    icon: '👥', label: 'Attendance',           module: () => window.AttendanceModule },
+    { id: 'payroll',       icon: '💰', label: 'Staff Payroll',        module: () => window.PayrollModule },
+    { id: 'dailyexpenses', icon: '📝', label: 'Daily Expenses',      module: () => window.DailyExpensesModule },
+    { id: 'expenses',      icon: '📑', label: 'Partner Expenses',     module: () => window.ExpensesModule },
+    { id: 'profit',        icon: '📈', label: 'Profit Settlement',    module: () => window.ProfitModule },
+    { id: 'busyexport',    icon: '💾', label: 'Busy Export',          module: () => window.BusyExportModule },
+    { id: 'capital',       icon: '🏗️', label: 'Capital & Assets',    module: () => window.CapitalModule },
+    { id: 'invoice',       icon: '🧾', label: 'Tax Invoice',          module: () => window.InvoiceModule }
   ];
 
   let currentModule = null;
@@ -50,6 +51,7 @@
           busLog: Utils.loadLocal('busLog'),
           billing: Utils.loadLocal('billing'),
           expenses: Utils.loadLocal('expenses'),
+          dailyExpenses: Utils.loadLocal('dailyExpenses'),
           profitSettlement: Utils.loadLocal('profitSettlement'),
           attendance: Utils.loadLocal('attendance'),
           payroll: Utils.loadLocal('payroll'),
@@ -75,7 +77,7 @@
           '⚠️ Reset All Data to Original Seed State',
           'Are you sure you want to reset all modified records back to the original Excel file data? All local edits, added records, and deletions will be reverted.',
           () => {
-            const keys = ['busLog', 'billing', 'expenses', 'profitSettlement', 'attendance', 'payroll', 'advances', 'capitalItems'];
+            const keys = ['busLog', 'billing', 'expenses', 'dailyExpenses', 'profitSettlement', 'attendance', 'payroll', 'advances', 'capitalItems'];
             keys.forEach(k => localStorage.removeItem('ME_' + k));
             alert('Data reset successfully! Reloading...');
             location.reload();

@@ -37,7 +37,8 @@ window.SEED_DATA = {
     contractMonths: 38,
     employees: ["Ashu","Vipin","Yogesh","Vishal"],
     baseSalary: 10000,
-    otRate: 50,
+    hourlyRate: 33.33,
+    otRate: 33.33,
     stdShiftHrs: 10,
     stdMonthlyDays: 30
   },
@@ -261,22 +262,27 @@ window.SEED_DATA = {
     {month:"Jun-26", billToUPSRTC:164383, penalty:4428, electricity:4856, billGST:25075, expHariom:240582, expAshish:0, penaltyGSTCN:675, officeRecipient:"Hariom Singh"}
   ],
 
-  // ---- Capital Investment & Assets ----
+  // ---- Capital Investment & Assets (Plant Installation & Project Budget) ----
   capitalInvestment: {
     items: [
-      {sheetRef:"Sheet No 1", partner:"Hariom Singh", description:"NEFT For Mayur Enterprises", grossAmount:200000, deductions:0},
-      {sheetRef:"Sheet No 1", partner:"Hariom Singh", description:"Exp Mics", grossAmount:17263, deductions:0},
-      {sheetRef:"Sheet No 3", partner:"Hariom Singh", description:"16-05-2023 RTGS For Ali Engineering Works", grossAmount:50000, deductions:0},
+      // Hariom Singh Expenses
+      {sheetRef:"Sheet No 1", partner:"Hariom Singh", description:"02-04-2023 Cheque For Ali Enginering Works", grossAmount:200000, deductions:0},
+      {sheetRef:"Sheet No 1", partner:"Hariom Singh", description:"18-04-2023 RTGS For Ali Enginering Works", grossAmount:200000, deductions:0},
+      {sheetRef:"Sheet No 1", partner:"Hariom Singh", description:"Exp Mics", grossAmount:83823, deductions:0},
+      {sheetRef:"Sheet No 2", partner:"Hariom Singh", description:"Exp Mics", grossAmount:17263, deductions:0},
+      {sheetRef:"Sheet No 3", partner:"Hariom Singh", description:"16-05-2023 RTGS For Ali Enginering Works", grossAmount:50000, deductions:0},
       {sheetRef:"Sheet No 3", partner:"Hariom Singh", description:"Exp Mics", grossAmount:19461, deductions:0},
       {sheetRef:"Sheet No 4", partner:"Hariom Singh", description:"Exp Mics", grossAmount:25978, deductions:0},
       {sheetRef:"Sheet No 5", partner:"Hariom Singh", description:"Exp Mics", grossAmount:36420, deductions:0},
       {sheetRef:"Sheet No 6", partner:"Hariom Singh", description:"Exp Mics", grossAmount:12137, deductions:0},
-      {sheetRef:"Sheet No 7", partner:"Hariom Singh", description:"28-5-2023 Cheque For Ali Engineering Works", grossAmount:199000, deductions:0},
+      {sheetRef:"Sheet No 7", partner:"Hariom Singh", description:"28-5-2023 Cheque For Ali Enginering Works", grossAmount:199000, deductions:0},
       {sheetRef:"Sheet No 7", partner:"Hariom Singh", description:"Exp Mics", grossAmount:34176, deductions:0},
       {sheetRef:"Sheet No 8", partner:"Hariom Singh", description:"Exp Mics", grossAmount:5648, deductions:0},
       {sheetRef:"Sheet No 14", partner:"Hariom Singh", description:"Exp Mics", grossAmount:303690, deductions:0},
-      {sheetRef:"Sheet No 1-2 Adj", partner:"Hariom Singh", description:"Less: NEFT Refund / Adjustment (₹2,00,000 + ₹2,50,000)", grossAmount:0, deductions:-450000},
-      {sheetRef:"GST Adj", partner:"Hariom Singh", description:"Less: GST Input / Adjustment", grossAmount:0, deductions:-99000},
+      {sheetRef:"Less", partner:"Hariom Singh", description:"Less: Refund / Adjustment", grossAmount:0, deductions:-450000},
+      {sheetRef:"Gst Less", partner:"Hariom Singh", description:"Gst Less", grossAmount:0, deductions:-99000},
+
+      // Ashish Singh Expenses
       {sheetRef:"Sheet No 1", partner:"Ashish Singh", description:"NEFT For Mayur Enterprises", grossAmount:200000, deductions:0},
       {sheetRef:"Sheet No 1", partner:"Ashish Singh", description:"Exp Mics", grossAmount:71358, deductions:0},
       {sheetRef:"Sheet No 2", partner:"Ashish Singh", description:"NEFT For Mayur Enterprises", grossAmount:250000, deductions:0},

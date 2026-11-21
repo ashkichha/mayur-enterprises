@@ -127,9 +127,17 @@ window.BusLogModule = (function() {
           <div class="card-title" style="margin-bottom: 0; padding-bottom: 0; border-bottom: none;">
             Bus Washing Register Log
           </div>
-          <button class="btn btn-primary" id="btn-show-add-form" type="button">
-            <span>➕</span> Add Entry
-          </button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-primary" id="btn-show-add-form" type="button">
+              <span>➕</span> Add Entry
+            </button>
+            <button class="btn btn-outline" id="btn-export-buslog-csv" type="button" title="Export to CSV">
+              <span>📥</span> Export CSV
+            </button>
+            <button class="btn btn-primary" id="btn-print-buslog" type="button" title="Print Log Sheet">
+              <span>🖨️</span> Print
+            </button>
+          </div>
         </div>
 
         <!-- Inline Add Entry Form (Initially Hidden) -->
@@ -203,6 +211,52 @@ window.BusLogModule = (function() {
     const formContainer = container.querySelector('#inline-add-container');
     const btnCancel = container.querySelector('#btn-cancel-add');
     const form = container.querySelector('#buslog-inline-form');
+
+    // Export CSV and Print buttons
+    const btnExport = container.querySelector('#btn-export-buslog-csv');
+    if (btnExport) {
+      btnExport.addEventListener('click', () => {
+        const headers = ["#", "Month", "Batch Ref", "Depot/Route", "Shift", "Washed Count", "Remarks"];
+        const lines = [headers.join(",")];
+        data.forEach((entry, idx) => {
+          lines.push([
+            idx + 1,
+            `"${entry.month || ''}"`,
+            `"${entry.batchRef || ''}"`,
+            `"${DEPOT_ROUTE}"`,
+            `"${SHIFT_INFO}"`,
+            Number(entry.washedCount) || 0,
+            `"${(entry.remarks || '').replace(/"/g, '""')}"`
+          ].join(","));
+        });
+        lines.push([
+          `"Total"`,
+          `"${totalMonths} Months"`,
+          `""`,
+          `"${DEPOT_ROUTE}"`,
+          `"${SHIFT_INFO}"`,
+          totalWashed,
+          `"Avg: ${avgPerMonth}/mo"`
+        ].join(","));
+
+        const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Mayur_Enterprises_Bus_Washing_Log_${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+    }
+
+    const btnPrint = container.querySelector('#btn-print-buslog');
+    if (btnPrint) {
+      btnPrint.addEventListener('click', () => {
+        window.print();
+      });
+    }
 
     if (btnShow && formContainer) {
       btnShow.addEventListener('click', () => {

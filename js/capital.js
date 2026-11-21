@@ -1,16 +1,13 @@
 // ============================================================
 // MAYUR ENTERPRISES — CAPITAL INVESTMENT & ASSETS MODULE
+// Plant Installation Cost & Partner Equity Split (53.18% / 46.82%)
 // ============================================================
 (function() {
   'use strict';
 
-  // Helper for currency formatting with fallback
   const formatMoney = (n) => {
     if (typeof Utils !== 'undefined' && typeof Utils.formatCurrency === 'function') {
       return Utils.formatCurrency(n);
-    }
-    if (typeof window !== 'undefined' && window.Utils && typeof window.Utils.formatCurrency === 'function') {
-      return window.Utils.formatCurrency(n);
     }
     if (n == null || isNaN(n)) return '₹0';
     const abs = Math.abs(Math.round(n));
@@ -20,12 +17,13 @@
   const CapitalModule = {
     _chartInstances: [],
 
-    // Computes all capital figures, partner balances, and depreciation schedule
     getItems() {
       const local = Utils.loadLocal('capitalItems');
-      if (local && Array.isArray(local) && local.length > 0) return local;
+      if (local && Array.isArray(local) && local.length >= 20) return local;
       const capData = (window.SEED_DATA && window.SEED_DATA.capitalInvestment) || {};
-      return Array.isArray(capData.items) ? JSON.parse(JSON.stringify(capData.items)) : [];
+      const items = Array.isArray(capData.items) ? JSON.parse(JSON.stringify(capData.items)) : [];
+      Utils.saveLocal('capitalItems', items);
+      return items;
     },
 
     saveItems(items) {
@@ -44,43 +42,53 @@
         "FY 2027-28", "FY 2028-29", "FY 2029-30", "FY 2030-31"
       ];
 
-      // Section A calculations
-      let totalGross = 0;
-      let totalDeductions = 0;
-      items.forEach(it => {
-        totalGross += (Number(it.grossAmount) || 0);
-        totalDeductions += (Number(it.deductions) || 0);
-      });
-      const netCapital = totalGross + totalDeductions;
+      // Partition items by partner
+      const hariomItems = [];
+      const ashishItems = [];
 
-      // Section B calculations
-      let hariomGross = 0;
-      let hariomDeductions = 0;
-      let ashishGross = 0;
-      let ashishDeductions = 0;
-
-      items.forEach(it => {
+      items.forEach((it, originalIdx) => {
+        const itemWithIdx = { ...it, originalIdx };
         const p = (it.partner || '').toLowerCase();
-        const g = Number(it.grossAmount) || 0;
-        const d = Number(it.deductions) || 0;
         if (p.includes('hariom')) {
-          hariomGross += g;
-          hariomDeductions += d;
-        } else if (p.includes('ashish')) {
-          ashishGross += g;
-          ashishDeductions += d;
+          hariomItems.push(itemWithIdx);
+        } else {
+          ashishItems.push(itemWithIdx);
         }
       });
 
-      const hariomNet = hariomGross + hariomDeductions;
+      // Hariom calculations
+      let hariomGross = 0;
+      let hariomLess = 0;
+      let hariomGstLess = 0;
+      hariomItems.forEach(it => {
+        const g = Number(it.grossAmount) || 0;
+        const d = Number(it.deductions) || 0;
+        hariomGross += g;
+        if (it.sheetRef === 'Gst Less' || (it.description && it.description.toLowerCase().includes('gst'))) {
+          hariomGstLess += d;
+        } else if (d < 0) {
+          hariomLess += d;
+        }
+      });
+      const hariomAfterLess = hariomGross + hariomLess;
+      const hariomNet = hariomAfterLess + hariomGstLess;
+
+      // Ashish calculations
+      let ashishGross = 0;
+      let ashishDeductions = 0;
+      ashishItems.forEach(it => {
+        ashishGross += Number(it.grossAmount) || 0;
+        ashishDeductions += Number(it.deductions) || 0;
+      });
       const ashishNet = ashishGross + ashishDeductions;
-      const totalPartnerNet = hariomNet + ashishNet;
 
-      const hariomShare = totalPartnerNet > 0 ? (hariomNet / totalPartnerNet) * 100 : 0;
-      const ashishShare = totalPartnerNet > 0 ? (ashishNet / totalPartnerNet) * 100 : 0;
+      // Total Capital Project Cost
+      const costOfCapitalProject = hariomNet + ashishNet;
+      const hariomShare = costOfCapitalProject > 0 ? (hariomNet / costOfCapitalProject) * 100 : 53.18;
+      const ashishShare = costOfCapitalProject > 0 ? (ashishNet / costOfCapitalProject) * 100 : 46.82;
 
-      // Section C calculations (15% WDV for 5 years)
-      let currentOpening = netCapital;
+      // Depreciation Schedule (15% WDV for 8 FYs)
+      let currentOpening = costOfCapitalProject;
       let totalAnnualDep = 0;
       const schedule = [];
 
@@ -90,19 +98,12 @@
         totalAnnualDep += annualDep;
 
         let notes = '';
-        if (idx === 0) {
-          notes = 'Initial capitalisation & 1st year WDV depreciation';
-        } else if (idx === 1) {
-          notes = '2nd year WDV depreciation @ 15%';
-        } else if (idx === 2) {
-          notes = '3rd year WDV depreciation @ 15%';
-        } else if (idx === depYears.length - 1) {
-          notes = `5th year WDV depreciation (Residual Value ${formatMoney(closing)})`;
-        } else if (fy === 'FY 2026-27') {
-          notes = '4th year WDV depreciation (Contract ends Jun-26)';
-        } else {
-          notes = `${idx + 1}th year WDV depreciation @ ${(depRate * 100).toFixed(0)}%`;
-        }
+        if (idx === 0) notes = 'Initial capitalisation & 1st year WDV depreciation';
+        else if (idx === 1) notes = '2nd year WDV depreciation @ 15%';
+        else if (idx === 2) notes = '3rd year WDV depreciation @ 15%';
+        else if (fy === 'FY 2026-27') notes = '4th year WDV depreciation (Contract Period Ends)';
+        else if (idx === depYears.length - 1) notes = `Final WDV residual value: ${formatMoney(closing)}`;
+        else notes = `${idx + 1}th year WDV depreciation @ ${(depRate * 100).toFixed(0)}%`;
 
         schedule.push({
           fy,
@@ -110,7 +111,7 @@
           rate: depRate,
           annualDep,
           closing,
-          ledger: 'Plant & Machinery',
+          ledger: 'Plant & Machinery (Bus Washing Plant)',
           notes
         });
 
@@ -121,28 +122,21 @@
 
       return {
         items,
-        totalGross,
-        totalDeductions,
-        netCapital,
-        hariom: {
-          name: 'Hariom Singh',
-          gross: hariomGross,
-          deductions: hariomDeductions,
-          net: hariomNet,
-          share: hariomShare
-        },
-        ashish: {
-          name: 'Ashish Singh',
-          gross: ashishGross,
-          deductions: ashishDeductions,
-          net: ashishNet,
-          share: ashishShare
-        },
-        depRate,
-        depYears,
+        hariomItems,
+        ashishItems,
+        hariomGross,
+        hariomLess,
+        hariomAfterLess,
+        hariomGstLess,
+        hariomNet,
+        ashishNet,
+        costOfCapitalProject,
+        hariomShare,
+        ashishShare,
         schedule,
         totalAnnualDep,
-        finalClosingWDV
+        finalClosingWDV,
+        depRate
       };
     },
 
@@ -150,7 +144,7 @@
       if (!container) return;
       const data = this.getData();
 
-      // Destroy old charts if any
+      // Destroy old charts
       if (this._chartInstances && this._chartInstances.length > 0) {
         this._chartInstances.forEach(c => {
           try { c.destroy(); } catch(e) {}
@@ -163,164 +157,213 @@
       // 1. Title & Header
       html += `
         <div class="page-header">
-          <h2>CAPITAL INVESTMENT, ASSETS & DEPRECIATION SCHEDULE</h2>
-          <p>Initial Plant Setup, Partner Capital Contribution & Fixed Asset WDV Schedule</p>
+          <h2>CAPITAL PROJECT BUDGET &amp; PLANT INSTALLATION ASSETS</h2>
+          <p>UPSRTC Badaun Bus Washing Plant Installation Cost &bull; Foundation of Partner Equity Ratio: Hariom Singh (53.18%) &bull; Ashish Singh (46.82%)</p>
         </div>
       `;
 
-      // KPI Summary Cards
+      // KPI Cards
       html += `
         <div class="kpi-grid">
-          <div class="kpi-card blue">
-            <div class="kpi-label">Total Gross Invested</div>
-            <div class="kpi-value">${formatMoney(data.totalGross)}</div>
-            <div class="kpi-sub">Total capital & setup expenses injected</div>
-          </div>
-          <div class="kpi-card orange">
-            <div class="kpi-label">Deductions & Adjustments</div>
-            <div class="kpi-value">${formatMoney(data.totalDeductions)}</div>
-            <div class="kpi-sub">NEFT refunds & GST input adjustments</div>
-          </div>
           <div class="kpi-card green">
-            <div class="kpi-label">Net Opening Capital (Plant Cost)</div>
-            <div class="kpi-value">${formatMoney(data.netCapital)}</div>
-            <div class="kpi-sub">Bus Washing Plant Initial Cost</div>
+            <div class="kpi-label">Cost of Capital Project (Plant Cost)</div>
+            <div class="kpi-value">${formatMoney(data.costOfCapitalProject)}</div>
+            <div class="kpi-sub">Total Plant Installation &amp; Setup Investment</div>
           </div>
           <div class="kpi-card purple">
-            <div class="kpi-label">5-Year Closing WDV</div>
+            <div class="kpi-label">Exp By Hariom Singh (53.18%)</div>
+            <div class="kpi-value">${formatMoney(data.hariomNet)}</div>
+            <div class="kpi-sub">Net Share: ${data.hariomShare.toFixed(2)}% of Capital Project</div>
+          </div>
+          <div class="kpi-card orange">
+            <div class="kpi-label">Exp By Ashish Singh (46.82%)</div>
+            <div class="kpi-value">${formatMoney(data.ashishNet)}</div>
+            <div class="kpi-sub">Net Share: ${data.ashishShare.toFixed(2)}% of Capital Project</div>
+          </div>
+          <div class="kpi-card blue">
+            <div class="kpi-label">Asset Closing WDV (15% WDV)</div>
             <div class="kpi-value">${formatMoney(data.finalClosingWDV)}</div>
-            <div class="kpi-sub">Asset Residual Value (15% WDV)</div>
+            <div class="kpi-sub">Plant &amp; Machinery Residual Value</div>
           </div>
         </div>
       `;
 
-      // 2. Section A - Project Cost Breakdown
+      // 2. Main Budget Document Table
       html += `
-        <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
-            <div class="card-title" style="margin-bottom:0; border-bottom:none; padding-bottom:0;">
-              Section A — Project Cost Breakdown
+        <div class="card" id="card-capital-budget">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+            <div>
+              <div class="card-title" style="margin-bottom:2px; border-bottom:none; padding-bottom:0;">
+                Capital Project Budget for UPSRTC Badaun
+              </div>
+              <div style="font-size:12px; color:var(--text-muted);">
+                Plant Installation Breakdown &amp; Decided Partnership Ratio (Hariom Singh 53.18% / Ashish Singh 46.82%)
+              </div>
             </div>
-            <button class="btn btn-primary btn-sm no-print" id="btn-add-cap-item">
-              ➕ Add Capital Item
-            </button>
+            <div style="display:flex; gap:8px;" class="no-print">
+              <button class="btn btn-outline btn-sm" id="btn-print-cap">🖨️ Print Budget</button>
+              <button class="btn btn-outline btn-sm" id="btn-export-cap">📥 Export CSV</button>
+              <button class="btn btn-outline btn-sm" id="btn-reset-cap" title="Reset to original paper document">↺ Reset to Document</button>
+              <button class="btn btn-primary btn-sm" id="btn-add-cap-item">➕ Add Entry</button>
+            </div>
           </div>
+
           <div class="table-wrap">
-            <table>
+            <table class="table" style="font-size:12.5px;">
               <thead>
-                <tr>
-                  <th>Sheet Ref</th>
-                  <th>Partner</th>
-                  <th>Description</th>
-                  <th class="num">Gross Amount(₹)</th>
-                  <th class="num">Deductions/Adj(₹)</th>
-                  <th class="no-print" style="width:120px;">Actions</th>
+                <tr style="background:#1e3a5f; color:#ffffff;">
+                  <th style="width:120px;">Sheet No</th>
+                  <th class="num" style="width:180px;">Exp By Hariom Singh (₹)</th>
+                  <th class="num" style="width:180px;">Exp By Ashish Singh (₹)</th>
+                  <th>Detail</th>
+                  <th class="no-print" style="width:110px; text-align:center;">Action</th>
                 </tr>
               </thead>
               <tbody>
       `;
 
-      data.items.forEach((it, idx) => {
-        const grossStr = formatMoney(it.grossAmount);
-        const dedStr = formatMoney(it.deductions);
-        const dedClass = it.deductions < 0 ? 'num negative' : 'num';
+      // Section 1: Hariom Singh Entries
+      data.hariomItems.forEach(it => {
+        const isLessRow = it.sheetRef === 'Less' || it.sheetRef === 'Gst Less' || it.deductions < 0;
+        const amt = isLessRow ? it.deductions : it.grossAmount;
+        const amtStr = formatMoney(Math.abs(amt));
+        const amtDisplay = amt < 0 ? `-${amtStr}` : amtStr;
+        const rowStyle = isLessRow ? 'background:#fffaf0; font-weight:600;' : '';
+
         html += `
-                <tr>
-                  <td><code>${it.sheetRef || '-'}</code></td>
-                  <td><strong>${it.partner || '-'}</strong></td>
-                  <td>${it.description || '-'}</td>
-                  <td class="num">${grossStr}</td>
-                  <td class="${dedClass}">${dedStr}</td>
-                  <td class="actions-cell no-print">
-                    <button class="btn-action edit btn-edit-cap" data-index="${idx}" title="Edit Capital Item">✏️ Edit</button>
-                    <button class="btn-action delete btn-delete-cap" data-index="${idx}" title="Delete Item">🗑️</button>
-                  </td>
-                </tr>
+          <tr style="${rowStyle}">
+            <td><strong>${it.sheetRef}</strong></td>
+            <td class="num ${amt < 0 ? 'negative' : ''}">${amtDisplay}</td>
+            <td class="num" style="color:#cbd5e0;">-</td>
+            <td>${it.description}</td>
+            <td class="actions-cell no-print" style="text-align:center;">
+              <button class="btn-action edit btn-edit-cap" data-index="${it.originalIdx}" title="Edit">✏️</button>
+              <button class="btn-action delete btn-delete-cap" data-index="${it.originalIdx}" title="Delete">🗑️</button>
+            </td>
+          </tr>
         `;
       });
 
+      // Hariom Subtotal breakdown matching the image exactly
       html += `
-                <tr class="total-row">
-                  <td colspan="3"><strong>Total</strong></td>
-                  <td class="num"><strong>${formatMoney(data.totalGross)}</strong></td>
-                  <td class="num ${data.totalDeductions < 0 ? 'negative' : ''}"><strong>${formatMoney(data.totalDeductions)}</strong></td>
-                  <td class="no-print">—</td>
-                </tr>
-                <tr class="total-row" style="background:#e6fffa !important; border-top:1px solid #319795;">
-                  <td colspan="3"><strong>Net Capital (Gross + Deductions)</strong></td>
-                  <td colspan="2" class="num positive" style="font-size:13px;"><strong>${formatMoney(data.netCapital)}</strong></td>
-                  <td class="no-print">—</td>
-                </tr>
+        <tr class="total-row" style="background:#edf2f7; border-top:2px solid #cbd5e0;">
+          <td><strong>Total</strong></td>
+          <td class="num"><strong>${formatMoney(data.hariomGross)}</strong></td>
+          <td class="num" style="color:#cbd5e0;">-</td>
+          <td><strong>Subtotal Expenses (Hariom Singh)</strong></td>
+          <td class="no-print">-</td>
+        </tr>
+        <tr style="background:#fff5f5; font-weight:600;">
+          <td><strong>Less</strong></td>
+          <td class="num negative"><strong>${formatMoney(data.hariomLess)}</strong></td>
+          <td class="num" style="color:#cbd5e0;">-</td>
+          <td>Less: Refund / Adjustment</td>
+          <td class="no-print">-</td>
+        </tr>
+        <tr class="total-row" style="background:#edf2f7;">
+          <td><strong>Total</strong></td>
+          <td class="num"><strong>${formatMoney(data.hariomAfterLess)}</strong></td>
+          <td class="num" style="color:#cbd5e0;">-</td>
+          <td>Total After Less</td>
+          <td class="no-print">-</td>
+        </tr>
+        <tr style="background:#fff5f5; font-weight:600;">
+          <td><strong>Gst Less</strong></td>
+          <td class="num negative"><strong>${formatMoney(data.hariomGstLess)}</strong></td>
+          <td class="num" style="color:#cbd5e0;">-</td>
+          <td>Gst Less Adjustment</td>
+          <td class="no-print">-</td>
+        </tr>
+        <tr class="total-row" style="background:#e6fffa; border-top:2px solid #319795; border-bottom:3px solid #234e52;">
+          <td><strong style="color:#234e52;">Total (Hariom Singh)</strong></td>
+          <td class="num positive" style="font-size:14px; font-weight:800;"><strong>${formatMoney(data.hariomNet)}</strong></td>
+          <td class="num" style="color:#cbd5e0;">-</td>
+          <td><strong style="color:#234e52;">Net Invested by Hariom Singh (53.18%)</strong></td>
+          <td class="no-print">-</td>
+        </tr>
+      `;
+
+      // Separator row
+      html += `
+        <tr style="background:#f7fafc; height:18px;">
+          <td colspan="5" style="border:none;"></td>
+        </tr>
+      `;
+
+      // Section 2: Ashish Singh Entries
+      data.ashishItems.forEach(it => {
+        const amt = it.deductions < 0 ? it.deductions : it.grossAmount;
+        const amtStr = formatMoney(Math.abs(amt));
+        const amtDisplay = amt < 0 ? `-${amtStr}` : amtStr;
+
+        html += `
+          <tr>
+            <td><strong>${it.sheetRef}</strong></td>
+            <td class="num" style="color:#cbd5e0;">-</td>
+            <td class="num ${amt < 0 ? 'negative' : ''}">${amtDisplay}</td>
+            <td>${it.description}</td>
+            <td class="actions-cell no-print" style="text-align:center;">
+              <button class="btn-action edit btn-edit-cap" data-index="${it.originalIdx}" title="Edit">✏️</button>
+              <button class="btn-action delete btn-delete-cap" data-index="${it.originalIdx}" title="Delete">🗑️</button>
+            </td>
+          </tr>
+        `;
+      });
+
+      // Ashish Subtotal
+      html += `
+        <tr class="total-row" style="background:#e6fffa; border-top:2px solid #319795; border-bottom:3px solid #234e52;">
+          <td><strong style="color:#234e52;">Total (Ashish Singh)</strong></td>
+          <td class="num" style="color:#cbd5e0;">-</td>
+          <td class="num positive" style="font-size:14px; font-weight:800;"><strong>${formatMoney(data.ashishNet)}</strong></td>
+          <td><strong style="color:#234e52;">Net Invested by Ashish Singh (46.82%)</strong></td>
+          <td class="no-print">-</td>
+        </tr>
+      `;
+
+      // Separator row
+      html += `
+        <tr style="background:#f7fafc; height:18px;">
+          <td colspan="5" style="border:none;"></td>
+        </tr>
+      `;
+
+      // Grand Summary Rows (matching document footer)
+      html += `
+        <tr class="total-row" style="background:#1e3a5f; color:#ffffff; font-size:14px;">
+          <td style="color:#ffffff;"><strong>Total</strong></td>
+          <td class="num" style="color:#ecc94b; font-size:15px; font-weight:800;"><strong>${formatMoney(data.hariomNet)}</strong></td>
+          <td class="num" style="color:#ecc94b; font-size:15px; font-weight:800;"><strong>${formatMoney(data.ashishNet)}</strong></td>
+          <td colspan="2" style="color:#ffffff;"><strong>${formatMoney(data.costOfCapitalProject)} Cost Of Capital Project</strong></td>
+        </tr>
+        <tr class="total-row" style="background:#0f2b48; color:#ffffff; font-size:13px;">
+          <td style="color:#ffffff;"><strong>Partner Share %</strong></td>
+          <td class="num" style="color:#68d391; font-weight:800;"><strong>${data.hariomShare.toFixed(2)}%</strong></td>
+          <td class="num" style="color:#68d391; font-weight:800;"><strong>${data.ashishShare.toFixed(2)}%</strong></td>
+          <td colspan="2" style="color:#e2e8f0;">Decided Capital Ratio (Hariom Singh 53.18% / Ashish Singh 46.82%)</td>
+        </tr>
+      `;
+
+      html += `
               </tbody>
             </table>
           </div>
         </div>
       `;
 
-      // 3. Section B - Partner Opening Capital Balance
+      // 3. Section B: Depreciation Schedule (15% WDV)
       html += `
         <div class="card">
-          <div class="card-title">Section B — Partner Opening Capital Balance</div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Partner Name</th>
-                  <th class="num">Gross Invested(₹)</th>
-                  <th class="num">Deductions/Adj(₹)</th>
-                  <th class="num">Opening Capital Balance(₹)</th>
-                  <th class="num">Capital Share(%)</th>
-                  <th>Busy Account Group</th>
-                  <th style="text-align:center;">Dr/Cr</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><strong>${data.hariom.name}</strong></td>
-                  <td class="num">${formatMoney(data.hariom.gross)}</td>
-                  <td class="num ${data.hariom.deductions < 0 ? 'negative' : ''}">${formatMoney(data.hariom.deductions)}</td>
-                  <td class="num font-bold">${formatMoney(data.hariom.net)}</td>
-                  <td class="num font-bold">${data.hariom.share.toFixed(2)}%</td>
-                  <td>Capital Account</td>
-                  <td style="text-align:center;"><span class="badge badge-green">Cr</span></td>
-                </tr>
-                <tr>
-                  <td><strong>${data.ashish.name}</strong></td>
-                  <td class="num">${formatMoney(data.ashish.gross)}</td>
-                  <td class="num ${data.ashish.deductions < 0 ? 'negative' : ''}">${formatMoney(data.ashish.deductions)}</td>
-                  <td class="num font-bold">${formatMoney(data.ashish.net)}</td>
-                  <td class="num font-bold">${data.ashish.share.toFixed(2)}%</td>
-                  <td>Capital Account</td>
-                  <td style="text-align:center;"><span class="badge badge-green">Cr</span></td>
-                </tr>
-                <tr class="total-row">
-                  <td><strong>Total Opening Capital</strong></td>
-                  <td class="num"><strong>${formatMoney(data.totalGross)}</strong></td>
-                  <td class="num ${data.totalDeductions < 0 ? 'negative' : ''}"><strong>${formatMoney(data.totalDeductions)}</strong></td>
-                  <td class="num"><strong>${formatMoney(data.netCapital)}</strong></td>
-                  <td class="num"><strong>100.00%</strong></td>
-                  <td>Capital Account</td>
-                  <td style="text-align:center;"><span class="badge badge-green">Cr</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
-
-      // 4. Section C - Depreciation Schedule (15% WDV)
-      html += `
-        <div class="card">
-          <div class="card-title">Section C — Depreciation Schedule (15% WDV)</div>
+          <div class="card-title">Fixed Assets Depreciation Schedule (15% WDV)</div>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>Financial Year</th>
-                  <th class="num">Opening WDV(₹)</th>
+                  <th class="num">Opening WDV (₹)</th>
                   <th class="num">Depreciation Rate</th>
-                  <th class="num">Annual Depreciation(₹)</th>
-                  <th class="num">Closing WDV(₹)</th>
+                  <th class="num">Annual Depreciation (₹)</th>
+                  <th class="num">Closing WDV (₹)</th>
                   <th>Busy Asset Ledger</th>
                   <th>Notes</th>
                 </tr>
@@ -330,27 +373,27 @@
 
       data.schedule.forEach(row => {
         html += `
-                <tr>
-                  <td><strong>${row.fy}</strong></td>
-                  <td class="num">${formatMoney(row.opening)}</td>
-                  <td class="num">${(row.rate * 100).toFixed(0)}%</td>
-                  <td class="num negative">${formatMoney(row.annualDep)}</td>
-                  <td class="num font-bold">${formatMoney(row.closing)}</td>
-                  <td>${row.ledger}</td>
-                  <td><span style="color:var(--text-muted); font-size:11px;">${row.notes}</span></td>
-                </tr>
+          <tr>
+            <td><strong>${row.fy}</strong></td>
+            <td class="num">${formatMoney(row.opening)}</td>
+            <td class="num">${(row.rate * 100).toFixed(0)}%</td>
+            <td class="num negative">${formatMoney(row.annualDep)}</td>
+            <td class="num font-bold">${formatMoney(row.closing)}</td>
+            <td>${row.ledger}</td>
+            <td><span style="color:var(--text-muted); font-size:11px;">${row.notes}</span></td>
+          </tr>
         `;
       });
 
       html += `
                 <tr class="total-row">
-                  <td><strong>Total (5 Years)</strong></td>
-                  <td class="num">-</td>
-                  <td class="num">${(data.depRate * 100).toFixed(0)}% WDV</td>
+                  <td><strong>Total Cumulative</strong></td>
+                  <td class="num">${formatMoney(data.costOfCapitalProject)}</td>
+                  <td class="num">15% WDV</td>
                   <td class="num negative"><strong>${formatMoney(data.totalAnnualDep)}</strong></td>
                   <td class="num positive"><strong>${formatMoney(data.finalClosingWDV)}</strong></td>
                   <td>Plant &amp; Machinery</td>
-                  <td><strong>5-Year Cumulative WDV Schedule</strong></td>
+                  <td>Residual Asset Valuation</td>
                 </tr>
               </tbody>
             </table>
@@ -358,17 +401,17 @@
         </div>
       `;
 
-      // Charts Section (Visual Analytics)
+      // 4. Charts Section
       html += `
         <div class="charts-grid no-print">
           <div class="card">
-            <div class="card-title">Partner Capital Share (%)</div>
+            <div class="card-title">Plant Installation Equity Split (%)</div>
             <div class="chart-container">
               <canvas id="capital-share-chart"></canvas>
             </div>
           </div>
           <div class="card">
-            <div class="card-title">5-Year Asset WDV & Depreciation Trend</div>
+            <div class="card-title">Asset WDV &amp; Depreciation Schedule</div>
             <div class="chart-container">
               <canvas id="depreciation-trend-chart"></canvas>
             </div>
@@ -376,48 +419,31 @@
         </div>
       `;
 
-      // Busy Accounting Integration Guide Card
-      html += `
-        <div class="card" style="background:#f8fafc;">
-          <div class="card-title">Busy Accounting Software Master & Ledger Mapping</div>
-          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px; font-size:12px;">
-            <div style="border-left:3px solid var(--primary); padding-left:10px;">
-              <strong>Partner Capital Masters:</strong><br>
-              • <code>Hariom Singh Capital A/c</code> &rarr; Group: <em>Capital Account</em> (Cr Bal: ${formatMoney(data.hariom.net)})<br>
-              • <code>Ashish Singh Capital A/c</code> &rarr; Group: <em>Capital Account</em> (Cr Bal: ${formatMoney(data.ashish.net)})
-            </div>
-            <div style="border-left:3px solid var(--accent); padding-left:10px;">
-              <strong>Fixed Asset & Depreciation Masters:</strong><br>
-              • <code>Plant &amp; Machinery (Bus Washing Plant)</code> &rarr; Group: <em>Fixed Assets</em> (Dr Bal: ${formatMoney(data.netCapital)})<br>
-              • <code>Depreciation A/c</code> &rarr; Group: <em>Indirect Expenses</em> (Annual Rate: 15% WDV)
-            </div>
-          </div>
-        </div>
-      `;
-
       container.innerHTML = html;
 
-      // Render Charts if Chart.js is loaded
+      // Render Charts
       this.renderCharts(data);
+
+      // Bind Event Listeners
+      this.attachEvents(container, data);
     },
 
     renderCharts(data) {
-      if (typeof Chart === 'undefined') return;
+      if (typeof window.Chart === 'undefined') return;
 
-      // Chart 1: Partner Capital Share
       const shareCanvas = document.getElementById('capital-share-chart');
       if (shareCanvas) {
         try {
-          const shareChart = new Chart(shareCanvas, {
+          const shareChart = new window.Chart(shareCanvas, {
             type: 'doughnut',
             data: {
               labels: [
-                `${data.hariom.name} (${data.hariom.share.toFixed(1)}%)`,
-                `${data.ashish.name} (${data.ashish.share.toFixed(1)}%)`
+                `Hariom Singh (${data.hariomShare.toFixed(2)}%)`,
+                `Ashish Singh (${data.ashishShare.toFixed(2)}%)`
               ],
               datasets: [{
-                data: [data.hariom.net, data.ashish.net],
-                backgroundColor: ['#3182ce', '#38a169'],
+                data: [data.hariomNet, data.ashishNet],
+                backgroundColor: ['#805ad5', '#dd6b20'],
                 hoverOffset: 6
               }]
             },
@@ -437,12 +463,9 @@
             }
           });
           this._chartInstances.push(shareChart);
-        } catch(e) {
-          console.warn('Failed to render capital share chart:', e);
-        }
+        } catch(e) {}
       }
 
-      // Chart 2: Depreciation & Closing WDV Trend
       const depCanvas = document.getElementById('depreciation-trend-chart');
       if (depCanvas) {
         try {
@@ -450,7 +473,7 @@
           const closingData = data.schedule.map(s => s.closing);
           const depData = data.schedule.map(s => s.annualDep);
 
-          const depChart = new Chart(depCanvas, {
+          const depChart = new window.Chart(depCanvas, {
             type: 'bar',
             data: {
               labels: labels,
@@ -476,9 +499,7 @@
                 y: {
                   beginAtZero: true,
                   ticks: {
-                    callback: function(val) {
-                      return '₹' + (val / 1000).toLocaleString('en-IN') + 'k';
-                    }
+                    callback: (val) => '₹' + (val / 1000).toLocaleString('en-IN') + 'k'
                   }
                 }
               },
@@ -486,21 +507,76 @@
                 legend: { position: 'bottom' },
                 tooltip: {
                   callbacks: {
-                    label: function(ctx) {
-                      return ` ${ctx.dataset.label}: ${formatMoney(ctx.raw)}`;
-                    }
+                    label: (ctx) => ` ${ctx.dataset.label}: ${formatMoney(ctx.raw)}`
                   }
                 }
               }
             }
           });
           this._chartInstances.push(depChart);
-        } catch(e) {
-          console.warn('Failed to render depreciation trend chart:', e);
-        }
+        } catch(e) {}
+      }
+    },
+
+    attachEvents(container, data) {
+      // Print
+      const btnPrint = container.querySelector('#btn-print-cap');
+      if (btnPrint) {
+        btnPrint.addEventListener('click', () => window.print());
       }
 
-      // Add Capital Item Event
+      // Export CSV
+      const btnExport = container.querySelector('#btn-export-cap');
+      if (btnExport) {
+        btnExport.addEventListener('click', () => {
+          let csv = 'Sheet No,Exp By Hariom Singh,Exp By Ashish Singh,Detail\n';
+          data.hariomItems.forEach(it => {
+            const amt = it.deductions < 0 ? it.deductions : it.grossAmount;
+            csv += `"${it.sheetRef}","${amt}","","${it.description.replace(/"/g, '""')}"\n`;
+          });
+          csv += `"Total","${data.hariomGross}","","Subtotal Hariom Singh"\n`;
+          csv += `"Less","${data.hariomLess}","","Less: Refund / Adjustment"\n`;
+          csv += `"Total","${data.hariomAfterLess}","","Total After Less"\n`;
+          csv += `"Gst Less","${data.hariomGstLess}","","Gst Less"\n`;
+          csv += `"Total (Hariom Singh)","${data.hariomNet}","","Net Hariom Singh"\n\n`;
+
+          data.ashishItems.forEach(it => {
+            const amt = it.deductions < 0 ? it.deductions : it.grossAmount;
+            csv += `"${it.sheetRef}","","${amt}","${it.description.replace(/"/g, '""')}"\n`;
+          });
+          csv += `"Total (Ashish Singh)","","${data.ashishNet}","Net Ashish Singh"\n\n`;
+
+          csv += `"Total","${data.hariomNet}","${data.ashishNet}","${data.costOfCapitalProject} Cost Of Capital Project"\n`;
+          csv += `"Partner Share %","${data.hariomShare.toFixed(2)}%","${data.ashishShare.toFixed(2)}%","100.00%"\n`;
+
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `Capital_Project_Budget_UPSRTC_Badaun_${new Date().toISOString().slice(0, 10)}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        });
+      }
+
+      // Reset to original document
+      const btnReset = container.querySelector('#btn-reset-cap');
+      if (btnReset) {
+        btnReset.addEventListener('click', () => {
+          AppModal.confirm(
+            '↺ Reset Capital Budget',
+            'Are you sure you want to restore the original plant installation budget items from the document?',
+            () => {
+              localStorage.removeItem('ME_capitalItems');
+              CapitalModule.render(container);
+            }
+          );
+        });
+      }
+
+      // Add Capital Item
       const btnAddCap = container.querySelector('#btn-add-cap-item');
       if (btnAddCap) {
         btnAddCap.addEventListener('click', () => {
@@ -508,7 +584,7 @@
             <div class="form-row">
               <div class="form-group"><label>Sheet Ref</label><input id="f-cap-sheet" type="text" placeholder="e.g. Sheet No 1"></div>
               <div class="form-group">
-                <label>Partner / Source</label>
+                <label>Partner / Contributor</label>
                 <select id="f-cap-partner">
                   <option value="Hariom Singh">Hariom Singh</option>
                   <option value="Ashish Singh">Ashish Singh</option>
@@ -516,17 +592,17 @@
               </div>
             </div>
             <div class="form-row">
-              <div class="form-group"><label>Particulars / Description</label><input id="f-cap-desc" type="text" placeholder="Detail of expense or injection" required></div>
+              <div class="form-group"><label>Particulars / Detail</label><input id="f-cap-desc" type="text" placeholder="Detail of plant expense or machinery" required></div>
             </div>
             <div class="form-row">
               <div class="form-group"><label>Gross Amount (₹)</label><input id="f-cap-gross" type="number" min="0" value="0"></div>
-              <div class="form-group"><label>Deductions / Adj (₹, enter negative or 0)</label><input id="f-cap-ded" type="number" value="0"></div>
+              <div class="form-group"><label>Deductions / Less (₹, enter negative or 0)</label><input id="f-cap-ded" type="number" value="0"></div>
             </div>
           `;
           AppModal.show('➕ Add Capital Project Item', html, () => {
             const desc = document.getElementById('f-cap-desc').value.trim();
             if (!desc) {
-              alert('Description cannot be empty.');
+              alert('Detail description cannot be empty.');
               return;
             }
             const newItem = {
@@ -557,7 +633,7 @@
             <div class="form-row">
               <div class="form-group"><label>Sheet Ref</label><input id="edit-cap-sheet" type="text" value="${it.sheetRef || ''}"></div>
               <div class="form-group">
-                <label>Partner / Source</label>
+                <label>Partner / Contributor</label>
                 <select id="edit-cap-partner">
                   <option value="Hariom Singh" ${it.partner === 'Hariom Singh' ? 'selected' : ''}>Hariom Singh</option>
                   <option value="Ashish Singh" ${it.partner === 'Ashish Singh' ? 'selected' : ''}>Ashish Singh</option>
@@ -565,11 +641,11 @@
               </div>
             </div>
             <div class="form-row">
-              <div class="form-group"><label>Particulars / Description</label><input id="edit-cap-desc" type="text" value="${it.description || ''}" required></div>
+              <div class="form-group"><label>Particulars / Detail</label><input id="edit-cap-desc" type="text" value="${it.description || ''}" required></div>
             </div>
             <div class="form-row">
               <div class="form-group"><label>Gross Amount (₹)</label><input id="edit-cap-gross" type="number" value="${it.grossAmount}"></div>
-              <div class="form-group"><label>Deductions / Adj (₹)</label><input id="edit-cap-ded" type="number" value="${it.deductions}"></div>
+              <div class="form-group"><label>Deductions / Less (₹)</label><input id="edit-cap-ded" type="number" value="${it.deductions}"></div>
             </div>
           `;
 
@@ -603,7 +679,7 @@
 
           AppModal.confirm(
             '🗑️ Delete Capital Item',
-            `Are you sure you want to delete <strong>${it.description}</strong> (${formatMoney(it.grossAmount + it.deductions)})?`,
+            `Are you sure you want to delete <strong>${it.description}</strong>?`,
             () => {
               currentItems.splice(idx, 1);
               CapitalModule.saveItems(currentItems);
@@ -615,6 +691,5 @@
     }
   };
 
-  // Expose to window
   window.CapitalModule = CapitalModule;
 })();

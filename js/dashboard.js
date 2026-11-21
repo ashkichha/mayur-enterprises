@@ -150,7 +150,7 @@ window.DashboardModule = {
       </div>
 
       <!-- Top KPI Cards Grid -->
-      <div class="kpi-grid">
+      <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
         <div class="kpi-card blue">
           <div class="kpi-label">Total Bill To UPSRTC</div>
           <div class="kpi-value">${U.formatCurrency(totalBilledUPSRTC)}</div>
@@ -164,15 +164,21 @@ window.DashboardModule = {
         </div>
 
         <div class="kpi-card orange">
-          <div class="kpi-label">Ashish Singh Share</div>
+          <div class="kpi-label">Ashish Singh Share (46.82%)</div>
           <div class="kpi-value">${U.formatCurrency(ashishShare)}</div>
-          <div class="kpi-sub">46.82% of Net Profit/Loss</div>
+          <div class="kpi-sub">46.82% of Net Profit/Loss (Capital Ratio)</div>
         </div>
 
         <div class="kpi-card purple">
-          <div class="kpi-label">Hariom Singh Total</div>
-          <div class="kpi-value">${U.formatCurrency(hariomTotal)}</div>
-          <div class="kpi-sub">53.18% Share (${U.formatCurrency(hariomShare)}) + 10% Office Exp (${U.formatCurrency(sumI)})</div>
+          <div class="kpi-label">Hariom Singh Share (53.18%)</div>
+          <div class="kpi-value">${U.formatCurrency(hariomShare)}</div>
+          <div class="kpi-sub">53.18% of Net Profit/Loss (Capital Ratio)</div>
+        </div>
+
+        <div class="kpi-card teal" style="border-left: 4px solid #319795;">
+          <div class="kpi-label">10% Office Expense</div>
+          <div class="kpi-value" style="color:#234e52;">${U.formatCurrency(sumI)}</div>
+          <div class="kpi-sub">Separate Operating Expense (No Capital % Impact)</div>
         </div>
       </div>
 
@@ -320,24 +326,31 @@ window.DashboardModule = {
       <div class="charts-grid">
         <!-- Partner Allocation PIE Chart -->
         <div class="card">
-          <div class="card-title">Partner Allocation (Ashish vs Hariom Total Allocation)</div>
+          <div class="card-title">Net Profit Distribution &amp; Office Expense Split</div>
           <div class="chart-container">
             <canvas id="dashboard-pie-chart"></canvas>
           </div>
-          <div style="display: flex; justify-content: space-around; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; text-align: center;">
+          <div style="display: flex; justify-content: space-around; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; text-align: center; flex-wrap: wrap; gap: 8px;">
             <div>
               <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
                 <span style="width: 10px; height: 10px; background: #dd6b20; border-radius: 50%; display: inline-block;"></span>
-                <strong>Ashish Singh Total:</strong> <span>${U.formatCurrency(ashishTotal)}</span>
+                <strong>Ashish Singh (46.82%):</strong> <span>${U.formatCurrency(ashishShare)}</span>
               </div>
-              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Share ${U.formatCurrency(ashishShare)} ${ashishOfficeExp > 0 ? '+ Office Exp ' + U.formatCurrency(ashishOfficeExp) : ''}</div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Capital Equity Profit Share</div>
             </div>
             <div>
               <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
                 <span style="width: 10px; height: 10px; background: #805ad5; border-radius: 50%; display: inline-block;"></span>
-                <strong>Hariom Singh Total:</strong> <span>${U.formatCurrency(hariomTotal)}</span>
+                <strong>Hariom Singh (53.18%):</strong> <span>${U.formatCurrency(hariomShare)}</span>
               </div>
-              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Share ${U.formatCurrency(hariomShare)} ${hariomOfficeExp > 0 ? '+ Office Exp ' + U.formatCurrency(hariomOfficeExp) : ''}</div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Capital Equity Profit Share</div>
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <span style="width: 10px; height: 10px; background: #319795; border-radius: 50%; display: inline-block;"></span>
+                <strong>10% Office Expense:</strong> <span>${U.formatCurrency(sumI)}</span>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Separate Operating Field</div>
             </div>
           </div>
         </div>
@@ -362,12 +375,13 @@ window.DashboardModule = {
           data: {
             labels: [
               `Ashish Singh Share (46.82%)`,
-              `Hariom Singh Total (53.18% + Office Exp)`
+              `Hariom Singh Share (53.18%)`,
+              `10% Office Expense (Separate Field)`
             ],
             datasets: [{
-              data: [Math.round(ashishShare), Math.round(hariomTotal)],
-              backgroundColor: ['#dd6b20', '#805ad5'],
-              hoverBackgroundColor: ['#c05621', '#6b46c1'],
+              data: [Math.round(ashishShare), Math.round(hariomShare), Math.round(sumI)],
+              backgroundColor: ['#dd6b20', '#805ad5', '#319795'],
+              hoverBackgroundColor: ['#c05621', '#6b46c1', '#234e52'],
               borderColor: '#ffffff',
               borderWidth: 2
             }]
@@ -388,7 +402,7 @@ window.DashboardModule = {
                 callbacks: {
                   label: (ctx) => {
                     const val = ctx.raw || 0;
-                    const total = Math.round(ashishShare + hariomTotal);
+                    const total = Math.round(ashishShare + hariomShare + sumI);
                     const pct = total > 0 ? ((val / total) * 100).toFixed(1) : '0.0';
                     return ` ${ctx.label}: ${U.formatCurrency(val)} (${pct}%)`;
                   }

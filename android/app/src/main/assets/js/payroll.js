@@ -48,12 +48,23 @@ window.PayrollModule = (function() {
       payrollData = JSON.parse(JSON.stringify(window.SEED_DATA.payroll));
     } else {
       payrollData = [
-        { employee: 'Ashu', month: 'Jun-2026', baseSalary: 10000, otHours: 12, otRate: 50 },
-        { employee: 'Vipin', month: 'Jun-2026', baseSalary: 10000, otHours: 10, otRate: 50 },
-        { employee: 'Yogesh', month: 'Jun-2026', baseSalary: 10000, otHours: 8, otRate: 50 },
-        { employee: 'Vishal', month: 'Jun-2026', baseSalary: 10000, otHours: 10, otRate: 50 }
+        { employee: 'Ashu', month: 'Jun-2026', dutyHours: 300, otHours: 12, hourlyRate: 33.33 },
+        { employee: 'Vipin', month: 'Jun-2026', dutyHours: 300, otHours: 10, hourlyRate: 33.33 },
+        { employee: 'Yogesh', month: 'Jun-2026', dutyHours: 300, otHours: 8, hourlyRate: 33.33 },
+        { employee: 'Vishal', month: 'Jun-2026', dutyHours: 300, otHours: 10, hourlyRate: 33.33 }
       ];
     }
+
+    // Ensure all entries have hourly parameters (removing static basic salary dependency)
+    payrollData.forEach(p => {
+      if (p.dutyHours == null) {
+        p.dutyHours = (p.baseSalary && p.baseSalary > 0) ? Math.round(p.baseSalary / 33.33) : 300;
+      }
+      if (p.hourlyRate == null) {
+        p.hourlyRate = p.otRate || 33.33;
+      }
+      if (p.otHours == null) p.otHours = 0;
+    });
 
     const localAdvances = Utils.loadLocal('advances');
     if (localAdvances && Array.isArray(localAdvances) && localAdvances.length > 0) {
@@ -119,7 +130,7 @@ window.PayrollModule = (function() {
     return Array.from(set);
   }
 
-  // Calculate summary KPIs based on current filters
+  // Calculate summary KPIs based on current filters (Hourly procedure)
   function calculateSummaryKPIs() {
     let filteredPayroll = payrollData.slice();
     if (filterEmployee !== 'ALL') {
@@ -129,34 +140,31 @@ window.PayrollModule = (function() {
       filteredPayroll = filteredPayroll.filter(p => isSameMonth(p.month, filterMonth));
     }
 
-    let totalBaseSalary = 0;
+    let totalDutyHours = 0;
     let totalOTHours = 0;
-    let totalOTAmount = 0;
     let totalGross = 0;
     let totalAdvance = 0;
     let totalNetBalance = 0;
 
     filteredPayroll.forEach(p => {
-      const base = Number(p.baseSalary) || 0;
-      const otHrs = Number(p.otHours) || 0;
-      const otRt = Number(p.otRate) || 0;
-      const otAmt = otHrs * otRt;
-      const gross = base + otAmt;
+      const duty = Number(p.dutyHours) != null ? Number(p.dutyHours) : 300;
+      const ot = Number(p.otHours) || 0;
+      const rate = Number(p.hourlyRate) || 33.33;
+      const gross = (duty + ot) * rate;
       const adv = getAdvanceTotalFor(p.employee, p.month);
       const net = gross - adv;
 
-      totalBaseSalary += base;
-      totalOTHours += otHrs;
-      totalOTAmount += otAmt;
+      totalDutyHours += duty;
+      totalOTHours += ot;
       totalGross += gross;
       totalAdvance += adv;
       totalNetBalance += net;
     });
 
     return {
-      totalBaseSalary,
+      totalDutyHours,
       totalOTHours,
-      totalOTAmount,
+      totalHours: totalDutyHours + totalOTHours,
       totalGross,
       totalAdvance,
       totalNetBalance,
@@ -171,12 +179,12 @@ window.PayrollModule = (function() {
     // Reset container
     container.innerHTML = '';
 
-    // 1. Page Header (Requirements 1 & 2)
+    // 1. Page Header
     const header = document.createElement('div');
     header.className = 'page-header';
     header.innerHTML = `
-      <h2>STAFF SALARY, OVERTIME & 15TH-OF-MONTH ADVANCE SETTLEMENT</h2>
-      <p>Employees: Ashu, Vipin, Yogesh, Vishal (₹10,000/month for 10 hrs/day + Overtime)</p>
+      <h2>STAFF HOURLY PAYROLL, OVERTIME &amp; 15TH-OF-MONTH ADVANCE SETTLEMENT</h2>
+      <p>Staff Roster: Ashu, Vipin, Yogesh, Vishal &bull; Purely Hourly Salary Procedure (Shift Hours + Overtime at Same Rate &bull; Mid-Month Advance Deductions)</p>
     `;
     container.appendChild(header);
 
@@ -187,24 +195,24 @@ window.PayrollModule = (function() {
     kpiGrid.id = 'payroll-kpi-grid';
     kpiGrid.innerHTML = `
       <div class="kpi-card blue">
-        <div class="kpi-label">Total Base Salary</div>
-        <div class="kpi-value" id="kpi-base">${Utils.formatCurrency(kpis.totalBaseSalary)}</div>
-        <div class="kpi-sub">${kpis.staffCount} Staff records evaluated</div>
+        <div class="kpi-label">Total Shift Hours Worked</div>
+        <div class="kpi-value" id="kpi-duty">${Utils.formatNumber(kpis.totalDutyHours)} Hrs</div>
+        <div class="kpi-sub">${kpis.staffCount} Staff evaluated (Standard 10h shift)</div>
       </div>
       <div class="kpi-card orange">
-        <div class="kpi-label">Total Overtime (${kpis.totalOTHours} Hrs)</div>
-        <div class="kpi-value" id="kpi-ot">${Utils.formatCurrency(kpis.totalOTAmount)}</div>
-        <div class="kpi-sub">Standard OT Rate: ₹50/hour</div>
+        <div class="kpi-label">Total Overtime Hours</div>
+        <div class="kpi-value" id="kpi-ot">${Utils.formatNumber(kpis.totalOTHours)} Hrs</div>
+        <div class="kpi-sub">Calculated at standard hourly rate</div>
       </div>
       <div class="kpi-card purple">
         <div class="kpi-label">Total Advances Taken</div>
         <div class="kpi-value" id="kpi-adv">${Utils.formatCurrency(kpis.totalAdvance)}</div>
-        <div class="kpi-sub">Sum of all mid-month advances</div>
+        <div class="kpi-sub">Mid-month advances (1st-15th)</div>
       </div>
       <div class="kpi-card green">
         <div class="kpi-label">Net Balance Payable on 15th</div>
         <div class="kpi-value" id="kpi-net">${Utils.formatCurrency(kpis.totalNetBalance)}</div>
-        <div class="kpi-sub">Gross Earned minus Advances</div>
+        <div class="kpi-sub">Total Gross Earned minus Advances</div>
       </div>
     `;
     container.appendChild(kpiGrid);
@@ -308,9 +316,9 @@ window.PayrollModule = (function() {
     }
 
     let rowsHTML = '';
-    let sumBase = 0;
+    let sumDutyHours = 0;
     let sumOTHours = 0;
-    let sumOTAmount = 0;
+    let sumTotalHours = 0;
     let sumGross = 0;
     let sumAdvance = 0;
     let sumNet = 0;
@@ -320,17 +328,17 @@ window.PayrollModule = (function() {
     } else {
       filtered.forEach((p) => {
         const originalIdx = payrollData.indexOf(p);
-        const base = Number(p.baseSalary) || 0;
+        const dutyHrs = Number(p.dutyHours) != null ? Number(p.dutyHours) : 300;
         const otHrs = Number(p.otHours) || 0;
-        const otRt = Number(p.otRate) || 0;
-        const otAmt = otHrs * otRt;
-        const gross = base + otAmt;
+        const hourlyRt = Number(p.hourlyRate) || 33.33;
+        const totalHrs = dutyHrs + otHrs;
+        const gross = Math.round(totalHrs * hourlyRt);
         const totalAdv = getAdvanceTotalFor(p.employee, p.month);
         const netBal = gross - totalAdv;
 
-        sumBase += base;
+        sumDutyHours += dutyHrs;
         sumOTHours += otHrs;
-        sumOTAmount += otAmt;
+        sumTotalHours += totalHrs;
         sumGross += gross;
         sumAdvance += totalAdv;
         sumNet += netBal;
@@ -342,17 +350,17 @@ window.PayrollModule = (function() {
           <tr>
             <td><strong>${p.employee}</strong></td>
             <td><span class="badge badge-blue">${p.month}</span></td>
-            <td class="num">${Utils.formatCurrency(base)}</td>
-            <td class="num">${Utils.formatNumber(otHrs)} hrs</td>
-            <td class="num">${Utils.formatCurrency(otRt)}/hr</td>
-            <td class="num" style="color:var(--primary); font-weight:600;">${Utils.formatCurrency(otAmt)}</td>
+            <td class="num">${Utils.formatNumber(dutyHrs)} hrs</td>
+            <td class="num" style="color:var(--primary); font-weight:700;">${Utils.formatNumber(otHrs)} hrs</td>
+            <td class="num font-bold">${Utils.formatNumber(totalHrs)} hrs</td>
+            <td class="num">₹${hourlyRt.toFixed(2)}/hr</td>
             <td class="num" style="font-weight:700;">${Utils.formatCurrency(gross)}</td>
             <td class="num" style="color:var(--danger); font-weight:600;">${Utils.formatCurrency(totalAdv)}</td>
             <td class="num ${netBal >= 0 ? 'positive' : 'negative'}" style="font-size:13px; font-weight:700;">
               <span class="badge ${netBadgeClass}">${Utils.formatCurrency(netBal)}</span>
             </td>
             <td style="text-align:center; white-space:nowrap;">
-              <button class="btn btn-outline btn-sm btn-edit-payroll" data-index="${originalIdx}" title="Edit Salary & OT">✏️</button>
+              <button class="btn btn-outline btn-sm btn-edit-payroll" data-index="${originalIdx}" title="Edit Hours &amp; Rates">✏️</button>
               <button class="btn btn-outline btn-sm btn-delete-payroll" data-index="${originalIdx}" style="color:var(--danger); border-color:#feb2b2;" title="Delete Record">🗑️</button>
             </td>
           </tr>
@@ -364,10 +372,10 @@ window.PayrollModule = (function() {
       <tr class="total-row">
         <td>TOTAL (${filtered.length} Staff)</td>
         <td>-</td>
-        <td class="num">${Utils.formatCurrency(sumBase)}</td>
-        <td class="num">${Utils.formatNumber(sumOTHours)} hrs</td>
+        <td class="num">${Utils.formatNumber(sumDutyHours)} hrs</td>
+        <td class="num" style="color:var(--primary);">${Utils.formatNumber(sumOTHours)} hrs</td>
+        <td class="num font-bold">${Utils.formatNumber(sumTotalHours)} hrs</td>
         <td class="num">-</td>
-        <td class="num">${Utils.formatCurrency(sumOTAmount)}</td>
         <td class="num">${Utils.formatCurrency(sumGross)}</td>
         <td class="num" style="color:var(--danger);">${Utils.formatCurrency(sumAdvance)}</td>
         <td class="num" style="color:var(--primary); font-size:14px;">${Utils.formatCurrency(sumNet)}</td>
@@ -384,7 +392,7 @@ window.PayrollModule = (function() {
       <!-- Collapsible Add/Update Payroll Form Card -->
       <div class="card" id="card-payroll-form" style="display:${payrollFormDisplay}; background:#fcfdfd; border:1px solid #cbd5e0; margin-bottom:16px;">
         <div class="card-title" id="payroll-form-title">
-          ${editingPayrollIndex >= 0 ? '✏️ Edit Staff Salary & Overtime Entry' : '➕ Add Staff Monthly Salary & Overtime Entry'}
+          ${editingPayrollIndex >= 0 ? '✏️ Edit Staff Hours & Overtime Entry' : '➕ Add Staff Monthly Hours & Overtime Entry'}
         </div>
         <form id="form-payroll">
           <div class="form-row">
@@ -402,26 +410,26 @@ window.PayrollModule = (function() {
               </datalist>
             </div>
             <div class="form-group">
-              <label>Base Salary (₹)</label>
-              <input type="number" id="payroll-form-base" min="0" step="100" value="10000" required>
+              <label>Duty Shift Hours Worked</label>
+              <input type="number" id="payroll-form-dutyhours" min="0" step="1" value="300" required>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>OT Hours Worked</label>
+              <label>Overtime (OT) Hours Worked</label>
               <input type="number" id="payroll-form-othours" min="0" step="0.5" value="0" placeholder="e.g. 10" required>
             </div>
             <div class="form-group">
-              <label>OT Rate (₹/Hr)</label>
-              <input type="number" id="payroll-form-otrate" min="0" step="1" value="50" required>
+              <label>Hourly Rate (₹/Hr - Same for Duty &amp; OT)</label>
+              <input type="number" id="payroll-form-rate" min="0" step="0.01" value="33.33" required>
             </div>
             <div class="form-group">
-              <label>Calculated OT Amount (₹)</label>
-              <input type="text" id="payroll-form-otamount-preview" value="₹0" readonly style="background:#edf2f7; font-weight:600;">
+              <label>Calculated Gross Earned (₹)</label>
+              <input type="text" id="payroll-form-gross-preview" value="₹10,000" readonly style="background:#edf2f7; font-weight:700; color:var(--primary);">
             </div>
           </div>
           <div class="btn-group">
-            <button type="submit" class="btn btn-success" id="btn-save-payroll">💾 Save Salary Record</button>
+            <button type="submit" class="btn btn-success" id="btn-save-payroll">💾 Save Hours &amp; Rate</button>
             <button type="button" class="btn btn-outline" id="btn-cancel-payroll">Cancel</button>
           </div>
         </form>
@@ -431,18 +439,18 @@ window.PayrollModule = (function() {
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
           <div class="card-title" style="margin-bottom:0; border-bottom:none; padding-bottom:0;">
-            Monthly Payroll & 15th Settlement Summary
+            Monthly Staff Hourly Payroll &amp; Overtime Register
           </div>
           <div style="display:flex; gap:8px;">
             <button class="btn btn-primary btn-sm" id="btn-toggle-payroll-form">
-              ➕ Add / Update Salary
+              ➕ Add / Update Hours
             </button>
           </div>
         </div>
 
         <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px; line-height:1.5;">
-          • <strong>Standard Terms:</strong> Fixed ₹10,000/month for 10 hours daily shift (Ashu, Vipin, Yogesh, Vishal).<br>
-          • <strong>Formulas:</strong> OT Amount = OT Hours × ₹50/Hr | Gross Earned = Base Salary + OT Amount | Net Balance = Gross Earned − Total Advances.
+          • <strong>Hourly Basis:</strong> Salary is calculated purely per hour (Duty Hours + Overtime Hours) at the same hourly rate.<br>
+          • <strong>15th Advance Deduction:</strong> Mid-month advances (1st–15th) are automatically subtracted to arrive at Net Payable on 15th.
         </div>
 
         <div class="table-wrap">
@@ -451,13 +459,13 @@ window.PayrollModule = (function() {
               <tr>
                 <th>Employee</th>
                 <th>Month</th>
-                <th class="num">Base Salary(₹)</th>
-                <th class="num">OT Hours</th>
-                <th class="num">OT Rate(₹/Hr)</th>
-                <th class="num">OT Amount(₹)</th>
-                <th class="num">Gross Earned(₹)</th>
-                <th class="num">Total Advance Taken(₹)</th>
-                <th class="num">Net Balance Payable on 15th(₹)</th>
+                <th class="num">Duty Hours (ड्यूटी घंटे)</th>
+                <th class="num" style="color:var(--primary); font-weight:700;">OT Hours (ओवरटाइम घंटे)</th>
+                <th class="num">Total Hours (कुल घंटे)</th>
+                <th class="num">Rate (₹/Hr)</th>
+                <th class="num">Gross Earned (कुल ₹)</th>
+                <th class="num" style="color:var(--danger);">Advances Deducted (₹)</th>
+                <th class="num">Net Balance on 15th (देय ₹)</th>
                 <th style="text-align:center;">Action</th>
               </tr>
             </thead>
@@ -826,19 +834,20 @@ window.PayrollModule = (function() {
       });
     }
 
+    const dutyInput = container.querySelector('#payroll-form-dutyhours');
     const otHrsInput = container.querySelector('#payroll-form-othours');
-    const otRateInput = container.querySelector('#payroll-form-otrate');
-    const otPreview = container.querySelector('#payroll-form-otamount-preview');
-    function updateOTPreview() {
-      if (!otHrsInput || !otRateInput || !otPreview) return;
-      const hrs = Number(otHrsInput.value) || 0;
-      const rate = Number(otRateInput.value) || 0;
-      otPreview.value = Utils.formatCurrency(hrs * rate);
+    const rateInput = container.querySelector('#payroll-form-rate');
+    const grossPreview = container.querySelector('#payroll-form-gross-preview');
+    function updateGrossPreview() {
+      if (!grossPreview) return;
+      const duty = dutyInput ? (Number(dutyInput.value) || 0) : 0;
+      const ot = otHrsInput ? (Number(otHrsInput.value) || 0) : 0;
+      const rate = rateInput ? (Number(rateInput.value) || 0) : 0;
+      grossPreview.value = Utils.formatCurrency((duty + ot) * rate);
     }
-    if (otHrsInput && otRateInput) {
-      otHrsInput.addEventListener('input', updateOTPreview);
-      otRateInput.addEventListener('input', updateOTPreview);
-    }
+    if (dutyInput) dutyInput.addEventListener('input', updateGrossPreview);
+    if (otHrsInput) otHrsInput.addEventListener('input', updateGrossPreview);
+    if (rateInput) rateInput.addEventListener('input', updateGrossPreview);
 
     // 5. Submit Payroll Form
     const payrollForm = container.querySelector('#form-payroll');
@@ -847,24 +856,26 @@ window.PayrollModule = (function() {
         e.preventDefault();
         const emp = container.querySelector('#payroll-form-employee').value.trim();
         const m = container.querySelector('#payroll-form-month').value.trim();
-        const base = Number(container.querySelector('#payroll-form-base').value) || 0;
+        const duty = Number(container.querySelector('#payroll-form-dutyhours').value) || 0;
         const otHrs = Number(container.querySelector('#payroll-form-othours').value) || 0;
-        const otRt = Number(container.querySelector('#payroll-form-otrate').value) || 0;
+        const rate = Number(container.querySelector('#payroll-form-rate').value) || 0;
 
         if (!emp || !m) {
           alert('Please enter employee name and month.');
           return;
         }
 
+        const entry = { employee: emp, month: m, dutyHours: duty, otHours: otHrs, hourlyRate: rate };
+
         if (editingPayrollIndex >= 0 && editingPayrollIndex < payrollData.length) {
-          payrollData[editingPayrollIndex] = { employee: emp, month: m, baseSalary: base, otHours: otHrs, otRate: otRt };
+          payrollData[editingPayrollIndex] = entry;
         } else {
           // Check if entry already exists for same employee and month
           const existingIdx = payrollData.findIndex(p => isSameEmployee(p.employee, emp) && isSameMonth(p.month, m));
           if (existingIdx >= 0) {
-            payrollData[existingIdx] = { employee: emp, month: m, baseSalary: base, otHours: otHrs, otRate: otRt };
+            payrollData[existingIdx] = entry;
           } else {
-            payrollData.push({ employee: emp, month: m, baseSalary: base, otHours: otHrs, otRate: otRt });
+            payrollData.push(entry);
           }
         }
 
@@ -887,16 +898,16 @@ window.PayrollModule = (function() {
           const item = payrollData[idx];
           const empSelect = container.querySelector('#payroll-form-employee');
           const monthInput = container.querySelector('#payroll-form-month');
-          const baseInput = container.querySelector('#payroll-form-base');
-          const otHoursInput = container.querySelector('#payroll-form-othours');
-          const otRtInput = container.querySelector('#payroll-form-otrate');
+          const dutyIn = container.querySelector('#payroll-form-dutyhours');
+          const otHoursIn = container.querySelector('#payroll-form-othours');
+          const rateIn = container.querySelector('#payroll-form-rate');
 
           if (empSelect) empSelect.value = item.employee;
           if (monthInput) monthInput.value = item.month;
-          if (baseInput) baseInput.value = item.baseSalary;
-          if (otHoursInput) otHoursInput.value = item.otHours;
-          if (otRtInput) otRtInput.value = item.otRate;
-          updateOTPreview();
+          if (dutyIn) dutyIn.value = item.dutyHours != null ? item.dutyHours : 300;
+          if (otHoursIn) otHoursIn.value = item.otHours || 0;
+          if (rateIn) rateIn.value = item.hourlyRate || 33.33;
+          updateGrossPreview();
 
           const formCard = container.querySelector('#card-payroll-form');
           if (formCard) formCard.scrollIntoView({ behavior: 'smooth' });

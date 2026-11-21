@@ -42,58 +42,91 @@
     return (val < 0 ? '-₹' : '₹') + s;
   }
 
-  function calculateRow(rawRow, config) {
-    const billToUPSRTC = Number(rawRow.billToUPSRTC) || 0;
-    const penalty = Number(rawRow.penalty) || 0;
-    const electricity = Number(rawRow.electricity) || 0;
-    const billGST = Number(rawRow.billGST) || 0;
-    const expHariom = Number(rawRow.expHariom) || 0;
-    const expAshish = Number(rawRow.expAshish) || 0;
-    const penaltyGSTCN = Number(rawRow.penaltyGSTCN) || 0;
-
-    // Profit/Loss (H) = A - B - C - D - E + F - G
-    const profitLossH = billToUPSRTC - penalty - electricity - billGST - expHariom - expAshish + penaltyGSTCN;
-
-    // 10% Office Exp (I) - max(0, H * 0.10), only when H > 0
+  function calculateAllRows(rawRows, config) {
     const officeExpRate = (config && config.officeExpRate != null) ? config.officeExpRate : 0.10;
-    const officeExpI = profitLossH > 0 ? (profitLossH * officeExpRate) : 0;
-
-    // Office recipient
-    const recipient = resolveOfficeRecipient(rawRow.month, rawRow.officeRecipient);
-    const ashishRecipient = isAshish(recipient);
-
-    // Net P/L (J)
-    const netPLJ = profitLossH - officeExpI;
-
-    // Partner Shares
     const ashishRatio = (config && config.ashishShare != null) ? config.ashishShare : 0.4682;
     const hariomRatio = (config && config.hariomShare != null) ? config.hariomShare : 0.5318;
-    const ashishShare = netPLJ * ashishRatio;
-    const hariomShare = netPLJ * hariomRatio;
 
-    // Partner Totals
-    const ashishTotal = ashishShare + (ashishRecipient ? officeExpI : 0);
-    const hariomTotal = hariomShare + (!ashishRecipient ? officeExpI : 0);
+    let cumulativeCarriedLoss = 0;
 
-    return {
-      month: rawRow.month,
-      billToUPSRTC,
-      penalty,
-      electricity,
-      billGST,
-      expHariom,
-      expAshish,
-      penaltyGSTCN,
-      profitLossH,
-      officeExpI,
-      officeRecipient: recipient,
-      isAshishRecipient: ashishRecipient,
-      netPLJ,
-      ashishShare,
-      hariomShare,
-      ashishTotal,
-      hariomTotal
-    };
+    return rawRows.map(rawRow => {
+      const billToUPSRTC = Number(rawRow.billToUPSRTC) || 0;
+      const penalty = Number(rawRow.penalty) || 0;
+      const electricity = Number(rawRow.electricity) || 0;
+      const billGST = Number(rawRow.billGST) || 0;
+      const expHariom = Number(rawRow.expHariom) || 0;
+      const expAshish = Number(rawRow.expAshish) || 0;
+      const penaltyGSTCN = Number(rawRow.penaltyGSTCN) || 0;
+
+      // Profit/Loss (H) = A - B - C - D - E + F - G
+      const profitLossH = billToUPSRTC - penalty - electricity - billGST - expHariom - expAshish + penaltyGSTCN;
+
+      const recipient = resolveOfficeRecipient(rawRow.month, rawRow.officeRecipient);
+      const ashishRecipient = isAshish(recipient);
+
+      let officeExpI = 0;
+      let netPLJ = 0;
+      let ashishShare = 0;
+      let hariomShare = 0;
+      let lossSettledThisMonth = 0;
+
+      if (profitLossH < 0) {
+        // In a loss month: 10% expenses are added to the loss
+        const loss10Pct = Math.abs(profitLossH) * officeExpRate;
+        officeExpI = loss10Pct; // 10% office expense added to loss
+        const totalMonthlyLoss = Math.abs(profitLossH) + loss10Pct;
+        cumulativeCarriedLoss += totalMonthlyLoss;
+        netPLJ = -totalMonthlyLoss; // recorded as negative loss to carry forward
+        ashishShare = 0;
+        hariomShare = 0;
+      } else {
+        // Profit month: first settle any carried-forward loss
+        if (cumulativeCarriedLoss > 0) {
+          if (profitLossH >= cumulativeCarriedLoss) {
+            lossSettledThisMonth = cumulativeCarriedLoss;
+            const remainingProfit = profitLossH - cumulativeCarriedLoss;
+            cumulativeCarriedLoss = 0;
+            officeExpI = remainingProfit * officeExpRate;
+            netPLJ = remainingProfit - officeExpI;
+            ashishShare = netPLJ * ashishRatio;
+            hariomShare = netPLJ * hariomRatio;
+          } else {
+            lossSettledThisMonth = profitLossH;
+            cumulativeCarriedLoss -= profitLossH;
+            officeExpI = 0;
+            netPLJ = 0;
+            ashishShare = 0;
+            hariomShare = 0;
+          }
+        } else {
+          // Normal profit month without prior carried loss
+          officeExpI = profitLossH * officeExpRate;
+          netPLJ = profitLossH - officeExpI;
+          ashishShare = netPLJ * ashishRatio;
+          hariomShare = netPLJ * hariomRatio;
+        }
+      }
+
+      return {
+        month: rawRow.month,
+        billToUPSRTC,
+        penalty,
+        electricity,
+        billGST,
+        expHariom,
+        expAshish,
+        penaltyGSTCN,
+        profitLossH,
+        officeExpI,
+        officeRecipient: recipient,
+        isAshishRecipient: ashishRecipient,
+        lossSettledThisMonth,
+        carriedLossAfter: cumulativeCarriedLoss,
+        netPLJ,
+        ashishShare,
+        hariomShare
+      };
+    });
   }
 
   function calculateTotals(rows) {
@@ -110,8 +143,6 @@
       netPLJ: 0,
       ashishShare: 0,
       hariomShare: 0,
-      ashishTotal: 0,
-      hariomTotal: 0,
       totalExpenses: 0,
       totalRevenue: 0
     };
@@ -129,8 +160,6 @@
       acc.netPLJ += r.netPLJ;
       acc.ashishShare += r.ashishShare;
       acc.hariomShare += r.hariomShare;
-      acc.ashishTotal += r.ashishTotal;
-      acc.hariomTotal += r.hariomTotal;
       acc.totalExpenses += (r.penalty + r.electricity + r.billGST + r.expHariom + r.expAshish);
       acc.totalRevenue += r.billToUPSRTC;
       return acc;
@@ -152,9 +181,7 @@
       "Office Recipient",
       "Net P/L(J)",
       "Ashish 46.82%",
-      "Hariom 53.18%",
-      "Ashish Total",
-      "Hariom Total"
+      "Hariom 53.18%"
     ];
 
     const lines = [headers.join(",")];
@@ -174,9 +201,7 @@
         `"${r.officeRecipient}"`,
         Math.round(r.netPLJ),
         Math.round(r.ashishShare),
-        Math.round(r.hariomShare),
-        Math.round(r.ashishTotal),
-        Math.round(r.hariomTotal)
+        Math.round(r.hariomShare)
       ].join(","));
     });
 
@@ -194,9 +219,7 @@
       `"-"`,
       Math.round(totals.netPLJ),
       Math.round(totals.ashishShare),
-      Math.round(totals.hariomShare),
-      Math.round(totals.ashishTotal),
-      Math.round(totals.hariomTotal)
+      Math.round(totals.hariomShare)
     ].join(","));
 
     const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
@@ -234,7 +257,7 @@
       const seedData = getProfitData();
       const config = (window.SEED_DATA && window.SEED_DATA.config) || {};
 
-      let allRows = seedData.map(r => calculateRow(r, config));
+      let allRows = calculateAllRows(seedData, config);
 
       // Extract distinct years dynamically
       const yearSet = new Set();
@@ -300,42 +323,60 @@
               <div class="kpi-sub">Billed to UPSRTC (Col A) &bull; +${formatCurr(totals.penaltyGSTCN)} GST CN</div>
             </div>
 
+            <div class="kpi-card yellow">
+              <div class="kpi-label">TOTAL EXPENSES BY HARIOM SINGH</div>
+              <div class="kpi-value">${formatCurr(totals.expHariom)}</div>
+              <div class="kpi-sub">Out-of-Pocket Partner Expense (Col D)</div>
+            </div>
+
             <div class="kpi-card orange">
-              <div class="kpi-label">TOTAL EXPENSES</div>
+              <div class="kpi-label">TOTAL EXPENSES BY ASHISH SINGH</div>
+              <div class="kpi-value">${formatCurr(totals.expAshish)}</div>
+              <div class="kpi-sub">Out-of-Pocket Partner Expense (Col G)</div>
+            </div>
+
+            <div class="kpi-card purple">
+              <div class="kpi-label">TOTAL OPERATING EXPENSES</div>
               <div class="kpi-value">${formatCurr(totals.totalExpenses)}</div>
               <div class="kpi-sub">Penalty, Electricity, GST &amp; Partner Exp</div>
             </div>
 
             <div class="kpi-card ${totals.profitLossH >= 0 ? 'green' : 'orange'}">
-              <div class="kpi-label">TOTAL PROFIT / LOSS</div>
+              <div class="kpi-label">OPERATING PROFIT / LOSS (H)</div>
               <div class="kpi-value ${getPLClass(totals.profitLossH)}">${formatCurr(totals.profitLossH)}</div>
-              <div class="kpi-sub">Waterfall Profit Before Office Exp (Col H)</div>
+              <div class="kpi-sub">Waterfall Profit Before Office Exp &amp; Loss Settle</div>
             </div>
 
-            <div class="kpi-card purple">
-              <div class="kpi-label">NET P/L AFTER OFFICE EXP</div>
+            <div class="kpi-card green">
+              <div class="kpi-label">NET P/L DISTRIBUTED (J)</div>
               <div class="kpi-value ${getPLClass(totals.netPLJ)}">${formatCurr(totals.netPLJ)}</div>
-              <div class="kpi-sub">Office Exp Deducted: ${formatCurr(totals.officeExpI)} (Col I)</div>
+              <div class="kpi-sub">Office Exp Accounted: ${formatCurr(totals.officeExpI)} (Col I)</div>
             </div>
           </div>
 
           <!-- Partner Settlement Summary Cards -->
           <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-bottom: 20px;">
             <div class="kpi-card blue" style="background: linear-gradient(to right, #ffffff, #f0f7ff);">
-              <div class="kpi-label" style="color: #2b6cb0;">ASHISH SINGH — TOTAL SETTLEMENT (46.82%)</div>
-              <div class="kpi-value ${getPLClass(totals.ashishTotal)}">${formatCurr(totals.ashishTotal)}</div>
+              <div class="kpi-label" style="color: #2b6cb0;">ASHISH SINGH — PROFIT SHARE (46.82%)</div>
+              <div class="kpi-value ${getPLClass(totals.ashishShare)}">${formatCurr(totals.ashishShare)}</div>
               <div class="kpi-sub">
-                Profit Share: <strong>${formatCurr(totals.ashishShare)}</strong>
-                &bull; Office Exp: <strong>${formatCurr(totals.ashishTotal - totals.ashishShare)}</strong>
+                Equity Share: <strong>46.82%</strong> &bull; Total Expenses Paid: <strong>${formatCurr(totals.expAshish)}</strong>
               </div>
             </div>
 
             <div class="kpi-card green" style="background: linear-gradient(to right, #ffffff, #f0fff4);">
-              <div class="kpi-label" style="color: #276749;">HARIOM SINGH — TOTAL SETTLEMENT (53.18%)</div>
-              <div class="kpi-value ${getPLClass(totals.hariomTotal)}">${formatCurr(totals.hariomTotal)}</div>
+              <div class="kpi-label" style="color: #276749;">HARIOM SINGH — PROFIT SHARE (53.18%)</div>
+              <div class="kpi-value ${getPLClass(totals.hariomShare)}">${formatCurr(totals.hariomShare)}</div>
               <div class="kpi-sub">
-                Profit Share: <strong>${formatCurr(totals.hariomShare)}</strong>
-                &bull; Office Exp: <strong>${formatCurr(totals.hariomTotal - totals.hariomShare)}</strong>
+                Equity Share: <strong>53.18%</strong> &bull; Total Expenses Paid: <strong>${formatCurr(totals.expHariom)}</strong>
+              </div>
+            </div>
+
+            <div class="kpi-card purple" style="background: linear-gradient(to right, #ffffff, #faf5ff);">
+              <div class="kpi-label" style="color: #6b46c1;">10% OFFICE EXPENSES TOTAL (COL I)</div>
+              <div class="kpi-value positive">${formatCurr(totals.officeExpI)}</div>
+              <div class="kpi-sub">
+                Independent Field &bull; Credited / Loss Absorbed
               </div>
             </div>
           </div>
@@ -385,8 +426,9 @@
           <div class="card">
             <div class="card-title">MONTHLY PROFIT WATERFALL &amp; PARTNER SETTLEMENT</div>
             <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">
-              <strong>Waterfall Flow:</strong> Billed UPSRTC (A) &minus; Penalty (B) &minus; Electricity (C) &minus; Bill GST (E) &minus; Exp Hariom (D) &minus; Exp Ashish (G) + Penalty GST CN (F) = <strong>Profit/Loss (H)</strong>.
-              Then 10% Office Exp (I) = max(0, H &times; 10%) &rarr; <strong>Net P/L (J = H &minus; I)</strong> &rarr; Ashish (46.82%) &amp; Hariom (53.18%).
+              <strong>Waterfall Flow:</strong> Billed UPSRTC (A) &minus; Penalty (B) &minus; Electricity (C) &minus; Bill GST (E) &minus; Exp Hariom (D) &minus; Exp Ashish (G) + Penalty GST CN (F) = <strong>Profit/Loss (H)</strong>.<br>
+              <strong>Loss Carry-Forward Rule:</strong> In a loss month, 10% expenses are added to the loss, which carries forward and settles against the next month's profit before partner distribution.<br>
+              <strong>Shares:</strong> Ashish Singh (46.82%) &amp; Hariom Singh (53.18%).
             </p>
 
             <div class="table-wrap">
@@ -407,15 +449,13 @@
                     <th class="num" style="min-width: 105px;">Net P/L(J)</th>
                     <th class="num" style="min-width: 105px;">Ashish 46.82%</th>
                     <th class="num" style="min-width: 105px;">Hariom 53.18%</th>
-                    <th class="num" style="min-width: 105px;">Ashish Total</th>
-                    <th class="num" style="min-width: 105px;">Hariom Total</th>
                     <th class="no-print" style="width: 120px;">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${filteredRows.length === 0 ? `
                     <tr>
-                      <td colspan="17" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                      <td colspan="15" style="text-align: center; padding: 24px; color: var(--text-muted);">
                         No settlement records found matching current filter.
                       </td>
                     </tr>
@@ -441,8 +481,6 @@
                       <td class="num ${getPLClass(r.netPLJ)}">${formatCurr(r.netPLJ)}</td>
                       <td class="num ${getPLClass(r.ashishShare)}">${formatCurr(r.ashishShare)}</td>
                       <td class="num ${getPLClass(r.hariomShare)}">${formatCurr(r.hariomShare)}</td>
-                      <td class="num ${getPLClass(r.ashishTotal)}">${formatCurr(r.ashishTotal)}</td>
-                      <td class="num ${getPLClass(r.hariomTotal)}">${formatCurr(r.hariomTotal)}</td>
                       <td class="actions-cell no-print">
                         <button class="btn-action edit btn-edit-profit" data-index="${originalIdx}" title="Edit Month Values">✏️ Edit</button>
                         <button class="btn-action delete btn-delete-profit" data-index="${originalIdx}" title="Delete Record">🗑️</button>
@@ -467,8 +505,6 @@
                     <td class="num ${getPLClass(totals.netPLJ)}">${formatCurr(totals.netPLJ)}</td>
                     <td class="num ${getPLClass(totals.ashishShare)}">${formatCurr(totals.ashishShare)}</td>
                     <td class="num ${getPLClass(totals.hariomShare)}">${formatCurr(totals.hariomShare)}</td>
-                    <td class="num ${getPLClass(totals.ashishTotal)}">${formatCurr(totals.ashishTotal)}</td>
-                    <td class="num ${getPLClass(totals.hariomTotal)}">${formatCurr(totals.hariomTotal)}</td>
                     <td class="no-print">—</td>
                   </tr>
                 </tfoot>
@@ -726,7 +762,7 @@
       }
 
       function refreshView() {
-        allRows = seedData.map(r => calculateRow(r, config));
+        allRows = calculateAllRows(seedData, config);
         container.innerHTML = buildHTML();
         attachEvents();
         const searchInput = container.querySelector('#profit-search');
