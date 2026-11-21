@@ -30,7 +30,15 @@ jobs:
 
     - name: Build Debug APK
       working-directory: ./android
-      run: gradle assembleDebug --stacktrace --no-daemon
+      run: |
+        gradle assembleDebug --stacktrace > build.log 2>&1 || {
+          echo "### Gradle Build Error" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          tail -n 60 build.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat build.log
+          exit 1
+        }
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
